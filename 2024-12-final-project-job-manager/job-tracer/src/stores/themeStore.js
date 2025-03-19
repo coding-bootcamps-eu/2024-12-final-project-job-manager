@@ -38,5 +38,9 @@ export const useThemeStore = defineStore("theme", () => {
     applyTheme();
   }, { immediate: true });
 
-  return { darkMode, toggleTheme, applyTheme };
+  return {
+    darkMode,
+    toggleTheme,
+    applyTheme,
+  };
 });

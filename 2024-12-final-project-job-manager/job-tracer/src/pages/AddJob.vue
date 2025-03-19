@@ -1,58 +1,74 @@
 <template>
   <div class="add-job-container">
-    <h2>Добавить вакансию</h2>
+    <h2>{{ t('addJob') }}</h2>
+    
     <form @submit.prevent="handleSubmit">
       <div class="form-group">
-        <label>Компания</label>
-        <input v-model="job.company" placeholder="Название компании" required />
+        <label>{{ t('company') }}</label>
+        <input v-model="job.company" :placeholder="t('companyPlaceholder')" required />
       </div>
 
       <div class="form-group">
-        <label>Должность</label>
-        <input v-model="job.position" placeholder="Название должности" required />
+        <label>{{ t('position') }}</label>
+        <input v-model="job.position" :placeholder="t('positionPlaceholder')" required />
       </div>
 
       <div class="form-group">
-        <label>Ссылка на вакансию</label>
-        <input v-model="job.link" placeholder="URL вакансии" required />
+        <label>{{ t('link') }}</label>
+        <input v-model="job.link" :placeholder="t('linkPlaceholder')" required />
       </div>
 
       <div class="form-group">
-        <label>Сопроводительное письмо (Anschreiben)</label>
+        <label>{{ t('coverLetter') }}</label>
         <input type="file" ref="coverLetterInput" @change="handleCoverLetterUpload" accept=".txt,.doc,.docx,.pdf" />
       </div>
 
       <div class="form-group">
-        <label>Резюме (Lebenslauf)</label>
+        <label>{{ t('resume') }}</label>
         <input type="file" ref="resumeInput" @change="handleResumeUpload" accept=".txt,.doc,.docx,.pdf" />
       </div>
 
       <div class="form-group">
-        <label>Статус</label>
+        <label>{{ t('status') }}</label>
         <select v-model="job.status">
-          <option value="Sent">Отправлено</option>
-          <option value="Interview">Интервью</option>
-          <option value="Rejected">Отклонено</option>
-          <option value="Accepted">Принято</option>
+          <option value="Sent">{{ t('jobStatus.sent') }}</option>
+          <option value="Interview">{{ t('jobStatus.interview') }}</option>
+          <option value="Rejected">{{ t('jobStatus.rejected') }}</option>
+          <option value="Accepted">{{ t('jobStatus.accepted') }}</option>
         </select>
       </div>
 
-      <button type="submit" :disabled="loading">Добавить</button>
-      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+      <div class="form-actions">
+        <button type="submit" class="submit-btn" :disabled="loading">
+          {{ loading ? t('loading') : t('submit') }}
+        </button>
+        <button type="button" class="cancel-btn" @click="$emit('cancel')" v-if="showCancelButton">
+          {{ t('cancel') }}
+        </button>
+      </div>
+      
+      <div v-if="errorMessage" class="error-message">
+        <span>{{ errorMessage }}</span>
+        <button @click="clearError" class="clear-error-btn">&times;</button>
+      </div>
     </form>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, defineProps, defineEmits } from "vue";
 import { useJobStore } from "@/stores/jobStore";
-import { useI18n } from "vue-i18n"; // добавлено для поддержки смены языка
+import { useI18n } from "vue-i18n";
 
-// Если потребуется отследить событие смены языка, можно добавить стор для языка, как в Home.vue
+const props = defineProps({
+  showCancelButton: {
+    type: Boolean,
+    default: false
+  }
+});
 
-const { t } = useI18n(); // функция перевода (пока не используется в шаблоне, но доступна для расширения)
-
-const emit = defineEmits(['job-added']);
+const emit = defineEmits(['job-added', 'cancel']);
+const { t } = useI18n();
 const jobStore = useJobStore();
 const loading = ref(false);
 const errorMessage = ref("");
@@ -70,18 +86,26 @@ const job = ref({
 
 const validateJob = () => {
   if (!job.value.company.trim()) {
-    errorMessage.value = "Введите название компании.";
+    errorMessage.value = t('validation.companyRequired');
     return false;
   }
   if (!job.value.position.trim()) {
-    errorMessage.value = "Введите должность.";
+    errorMessage.value = t('validation.positionRequired');
     return false;
   }
-  if (!job.value.link.trim() || !job.value.link.startsWith("http")) {
-    errorMessage.value = "Введите корректную ссылку на вакансию.";
+  
+  // Проверяем, что ссылка начинается с http:// или https://
+  const urlPattern = /^https?:\/\/.+/i;
+  if (!job.value.link.trim() || !urlPattern.test(job.value.link)) {
+    errorMessage.value = t('validation.validLinkRequired');
     return false;
   }
+  
   return true;
+};
+
+const clearError = () => {
+  errorMessage.value = "";
 };
 
 const handleCoverLetterUpload = (event) => {
@@ -92,8 +116,20 @@ const handleResumeUpload = (event) => {
   resumeFile.value = event.target.files[0];
 };
 
-const handleSubmit = async () => {
+const resetForm = () => {
+  job.value = { company: "", position: "", link: "", status: "Sent" };
+  coverLetterFile.value = null;
+  resumeFile.value = null;
+  
+  // Сбрасываем file-инпуты
+  if (coverLetterInput.value) coverLetterInput.value.value = "";
+  if (resumeInput.value) resumeInput.value.value = "";
+  
   errorMessage.value = "";
+};
+
+const handleSubmit = async () => {
+  clearError();
   if (!validateJob()) return;
 
   loading.value = true;
@@ -103,23 +139,20 @@ const handleSubmit = async () => {
     formData.append("position", job.value.position);
     formData.append("link", job.value.link);
     formData.append("status", job.value.status);
+    
     if (coverLetterFile.value) {
       formData.append("coverLetter", coverLetterFile.value);
     }
+    
     if (resumeFile.value) {
       formData.append("resume", resumeFile.value);
     }
 
     await jobStore.addJob(formData);
-    job.value = { company: "", position: "", link: "", status: "Sent" };
-    coverLetterFile.value = null;
-    resumeFile.value = null;
-    // Для сброса file-инпутов устанавливаем пустую строку (это стандартная практика)
-    coverLetterInput.value.value = "";
-    resumeInput.value.value = "";
+    resetForm();
     emit('job-added');
   } catch (error) {
-    errorMessage.value = "Ошибка при добавлении вакансии.";
+    errorMessage.value = t('errorAdding');
     console.error("Ошибка при добавлении:", error);
   } finally {
     loading.value = false;
@@ -142,73 +175,142 @@ const handleSubmit = async () => {
 .dark .add-job-container {
   background-color: #333;
   color: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 h2 {
   text-align: center;
+  margin-bottom: 20px;
+  font-size: 24px;
 }
 
 .form-group {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 label {
-  font-weight: bold;
+  font-weight: 600;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   color: inherit;
 }
 
-input[type="text"],
-input[type="url"],
-select,
-input[type="file"] {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background-color: #fff;
-  color: #333;
-}
-
-.dark input[type="text"],
-.dark input[type="url"],
-.dark select,
-.dark input[type="file"] {
-  border-color: #555;
-  background-color: #444;
-  color: #fff;
-}
-
-button {
+input,
+select {
   width: 100%;
   padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #333;
+  font-size: 14px;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.dark input,
+.dark select {
+  border-color: #555;
+  background-color: #444;
+  color: #eee;
+}
+
+.dark input:focus,
+.dark select:focus {
+  border-color: #0d6efd;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.submit-btn, .cancel-btn {
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.submit-btn {
+  flex: 1;
   background: #007bff;
   color: white;
-  border: none;
-  cursor: pointer;
-  border-radius: 4px;
 }
 
-button:disabled {
-  background: #ccc;
+.submit-btn:hover:not(:disabled) {
+  background: #0069d9;
+  transform: translateY(-1px);
 }
 
-.dark button {
-  background: #0056b3;
+.cancel-btn {
+  background: #f8f9fa;
+  color: #333;
+  border: 1px solid #ddd;
 }
 
-.dark button:disabled {
-  background: #777;
+.cancel-btn:hover {
+  background: #e9ecef;
+}
+
+.dark .submit-btn {
+  background: #0d6efd;
+}
+
+.dark .submit-btn:hover:not(:disabled) {
+  background: #0a58ca;
+}
+
+.dark .cancel-btn {
+  background: #343a40;
+  color: #eee;
+  border-color: #495057;
+}
+
+.dark .cancel-btn:hover {
+  background: #495057;
+}
+
+.submit-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .error-message {
-  color: #ff0000;
-  text-align: center;
-  margin-top: 10px;
+  margin-top: 16px;
+  padding: 10px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .dark .error-message {
-  color: #ff5555;
+  background-color: #481217;
+  color: #f8d7da;
+}
+
+.clear-error-btn {
+  background: none;
+  border: none;
+  color: #721c24;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.dark .clear-error-btn {
+  color: #f8d7da;
 }
 </style>

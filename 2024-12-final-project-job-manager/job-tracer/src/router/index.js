@@ -7,6 +7,14 @@ const routes = [
   { path: "/", component: Home },
   { path: "/add", component: AddJobPage },
   { path: "/about", component: About },
+  
+  // Новый маршрут для просмотра сохраненной версии вакансии
+  { 
+    path: "/jobs/:id/parsed", 
+    name: "parsedJob",
+    // Используем динамический импорт для lazy-loading
+    component: () => import("@/pages/ParsedJobView.vue")
+  }
 ];
 
 const router = createRouter({

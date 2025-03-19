@@ -1,72 +1,90 @@
 <template>
   <div class="job-tracker-home">
-    <div class="header-section">
-      <h1>{{ t('title') }}</h1>
-      <div class="filter-controls">
-        <select v-model="statusFilter" class="status-filter">
-          <option value="all">{{ t('allStatuses') }}</option>
-          <option value="Sent">{{ t('sent') }}</option>
-          <option value="Interview">{{ t('interview') }}</option>
-          <option value="Rejected">{{ t('rejected') }}</option>
-          <option value="Accepted">{{ t('accepted') }}</option>
-        </select>
-
-        <input
-          v-model="searchQuery"
-          :placeholder="t('searchPlaceholder')"
-          class="search-input"
-        />
+    <!-- Показываем детальный просмотр вакансии, если она выбрана -->
+    <div v-if="selectedJob" class="job-view-container">
+      <div class="back-button-container">
+        <button @click="selectedJob = null" class="back-button">
+          &larr; {{ t('backToList') }}
+        </button>
       </div>
-    </div>
-
-    <div v-if="loading" class="loading-indicator">{{ t('loading') }}</div>
-
-    <div v-else-if="errorMessage" class="error-message">
-      {{ errorMessage }}
-      <button @click="fetchJobs" class="retry-button">{{ t('retry') }}</button>
-    </div>
-
-    <div v-else-if="filteredJobs.length" class="jobs-list">
-      <JobCard
-        v-for="job in filteredJobs"
-        :key="job.id"
-        :job="job"
-        @remove="handleRemoveJob"
-        @update-status="handleStatusUpdate"
+      <JobView 
+        :job="selectedJob" 
+        @update="updateJob"
+        @delete="handleRemoveJob"
       />
     </div>
-
-    <div v-else class="empty-state">
-      <p v-if="statusFilter !== 'all' || searchQuery">
-        {{ t('noJobsWithFilters') }}
-      </p>
-      <p v-else>
-        {{ t('noJobs') }}
-      </p>
-    </div>
-
-    <div class="stats-panel">
-      <h3>{{ t('stats') }}</h3>
-      <div class="stats-grid">
-        <div class="stat-card total">
-          <span class="stat-value">{{ stats.total }}</span>
-          <span class="stat-label">{{ t('total') }}</span>
+    
+    <!-- Показываем список вакансий, если ничего не выбрано -->
+    <div v-else>
+      <div class="header-section">
+        <h1>{{ t('title') }}</h1>
+        <div class="filter-controls">
+          <select v-model="statusFilter" class="status-filter">
+            <option value="all">{{ t('allStatuses') }}</option>
+            <option value="sent">{{ t('sent') }}</option>
+            <option value="interview">{{ t('interview') }}</option>
+            <option value="rejected">{{ t('rejected') }}</option>
+            <option value="accepted">{{ t('accepted') }}</option>
+          </select>
+  
+          <input
+            v-model="searchQuery"
+            :placeholder="t('searchPlaceholder')"
+            class="search-input"
+          />
         </div>
-        <div class="stat-card sent">
-          <span class="stat-value">{{ stats.sent }}</span>
-          <span class="stat-label">{{ t('sent') }}</span>
-        </div>
-        <div class="stat-card interview">
-          <span class="stat-value">{{ stats.interview }}</span>
-          <span class="stat-label">{{ t('interview') }}</span>
-        </div>
-        <div class="stat-card rejected">
-          <span class="stat-value">{{ stats.rejected }}</span>
-          <span class="stat-label">{{ t('rejected') }}</span>
-        </div>
-        <div class="stat-card accepted">
-          <span class="stat-value">{{ stats.accepted }}</span>
-          <span class="stat-label">{{ t('accepted') }}</span>
+      </div>
+  
+      <div v-if="loading" class="loading-indicator">{{ t('loading') }}</div>
+  
+      <div v-else-if="errorMessage" class="error-message">
+        {{ errorMessage }}
+        <button @click="fetchJobs" class="retry-button">{{ t('retry') }}</button>
+      </div>
+  
+      <div v-else-if="filteredJobs.length" class="jobs-list">
+        <JobCard
+          v-for="job in filteredJobs"
+          :key="job.id"
+          :job="job"
+          @click="selectJob(job)"
+          @remove="handleRemoveJob"
+          @update-status="handleStatusUpdate"
+        />
+      </div>
+  
+      <div v-else class="empty-state">
+        <p v-if="statusFilter !== 'all' || searchQuery">
+          {{ t('noJobsWithFilters') }}
+        </p>
+        <p v-else>
+          {{ t('noJobs') }}
+        </p>
+      </div>
+  
+      <div class="stats-panel">
+        <h3>{{ t('stats') }}</h3>
+        <div class="stats-grid">
+          <div class="stat-card total">
+            <span class="stat-value">{{ stats.total }}</span>
+            <span class="stat-label">{{ t('total') }}</span>
+          </div>
+          <div class="stat-card sent">
+            <span class="stat-value">{{ stats.sent }}</span>
+            <span class="stat-label">{{ t('sent') }}</span>
+          </div>
+          <div class="stat-card interview">
+            <span class="stat-value">{{ stats.interview }}</span>
+            <span class="stat-label">{{ t('interview') }}</span>
+          </div>
+          <div class="stat-card rejected">
+            <span class="stat-value">{{ stats.rejected }}</span>
+            <span class="stat-label">{{ t('rejected') }}</span>
+          </div>
+          <div class="stat-card accepted">
+            <span class="stat-value">{{ stats.accepted }}</span>
+            <span class="stat-label">{{ t('accepted') }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -76,9 +94,11 @@
 <script setup>
 import { useJobStore } from "@/stores/jobStore";
 import JobCard from "@/pages/JobCard.vue";
+import JobView from "@/views/JobView.vue";
 import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useLanguageStore } from "@/stores/languageStore"; // Подключаем для отслеживания смены языка
+import { useLanguageStore } from "@/stores/languageStore"; 
+import { storeToRefs } from "pinia";
 
 // Инициализация i18n
 const { t } = useI18n();
@@ -86,18 +106,72 @@ const { t } = useI18n();
 // Получаем доступ к вакансиям и языковому стору
 const jobStore = useJobStore();
 const languageStore = useLanguageStore();
-const { jobs, loading, errorMessage, fetchJobs, removeJob } = jobStore;
+
+// Используем storeToRefs для сохранения реактивности
+const { jobs, loading, errorMessage } = storeToRefs(jobStore);
+// Методы можно использовать напрямую
+const { fetchJobs, removeJob, updateJobStatus } = jobStore;
 
 // Локальные переменные для фильтрации и поиска
 const statusFilter = ref("all");
 const searchQuery = ref("");
+const selectedJob = ref(null);
 
 // При монтировании компонента загружаем вакансии
 onMounted(async () => {
   console.log("🚀 Компонент Home.vue смонтирован, загружаем вакансии...");
   await fetchJobs();
   console.log("✅ Вакансии после загрузки:", jobs.value);
+  
+  // Добавляем информацию о парсинге для каждой вакансии
+  if (jobs.value && Array.isArray(jobs.value)) {
+    jobs.value.forEach(job => {
+      if (job.isParsed) {
+        job.parsedLinks = {
+          data: `/api/jobs/${job.id}/parsed`,
+          screenshot: `/api/jobs/${job.id}/screenshot`,
+          html: `/api/jobs/${job.id}/html`,
+          text: `/api/jobs/${job.id}/text`
+        };
+      }
+    });
+  }
 });
+
+// Выбор вакансии для подробного просмотра
+const selectJob = (job) => {
+  console.log("📄 Выбрана вакансия:", job);
+  
+  // Если вакансия распарсена, но нет ссылок на данные парсинга, добавляем их
+  if (job.isParsed && !job.parsedLinks) {
+    job.parsedLinks = {
+      data: `/api/jobs/${job.id}/parsed`,
+      screenshot: `/api/jobs/${job.id}/screenshot`,
+      html: `/api/jobs/${job.id}/html`,
+      text: `/api/jobs/${job.id}/text`
+    };
+  }
+  
+  selectedJob.value = job;
+};
+
+// Обновление информации о вакансии (включая парсинг)
+const updateJob = (updatedJob) => {
+  console.log("🔄 Обновление вакансии:", updatedJob);
+  
+  // Находим индекс вакансии в массиве
+  const index = jobs.value.findIndex(j => j.id === updatedJob.id);
+  
+  if (index !== -1) {
+    // Обновляем вакансию в массиве
+    jobs.value[index] = updatedJob;
+    
+    // Если эта вакансия выбрана в данный момент, обновляем и ее
+    if (selectedJob.value && selectedJob.value.id === updatedJob.id) {
+      selectedJob.value = updatedJob;
+    }
+  }
+};
 
 // Удаление вакансии с подтверждением
 const handleRemoveJob = async (jobId) => {
@@ -105,13 +179,28 @@ const handleRemoveJob = async (jobId) => {
     console.log(`🗑️ Удаление вакансии с ID ${jobId}`);
     await removeJob(jobId);
     await fetchJobs();
+    
+    // Если была удалена выбранная вакансия, закрываем просмотр
+    if (selectedJob.value && selectedJob.value.id === jobId) {
+      selectedJob.value = null;
+    }
   }
 };
 
 // Обработка обновления статуса (в данном случае просто обновляем список вакансий)
 const handleStatusUpdate = async (data) => {
   console.log("🔄 Обновление статуса:", data);
+  
+  // Обновляем статус вакансии
+  await updateJobStatus(data.jobId, data.status);
+  
+  // Обновляем список вакансий
   await fetchJobs();
+  
+  // Если эта вакансия выбрана, обновляем ее статус
+  if (selectedJob.value && selectedJob.value.id === data.jobId) {
+    selectedJob.value.status = data.status;
+  }
 };
 
 // Вычисляемый список вакансий с фильтрами и поиском
@@ -143,10 +232,10 @@ const stats = computed(() => {
   }
   return {
     total: jobs.value.length,
-    sent: jobs.value.filter((job) => job.status === "Sent").length,
-    interview: jobs.value.filter((job) => job.status === "Interview").length,
-    rejected: jobs.value.filter((job) => job.status === "Rejected").length,
-    accepted: jobs.value.filter((job) => job.status === "Accepted").length,
+    sent: jobs.value.filter((job) => job.status === "sent").length,
+    interview: jobs.value.filter((job) => job.status === "interview").length,
+    rejected: jobs.value.filter((job) => job.status === "rejected").length,
+    accepted: jobs.value.filter((job) => job.status === "accepted").length,
   };
 });
 
@@ -155,12 +244,12 @@ watch([statusFilter, searchQuery], () => {
   console.log("🔍 Фильтры изменены:", statusFilter.value, searchQuery.value);
 });
 
-// Отслеживание смены языка (при необходимости можно добавить повторный вызов fetchJobs)
-// Если нужно обновлять вакансии при смене языка, раскомментируйте fetchJobs():
+// Отслеживание смены языка
 watch(
   () => languageStore.currentLanguage,
   (newLang, oldLang) => {
     console.log(`🌐 Язык поменялся с ${oldLang} на ${newLang}`);
+    // При необходимости можно обновить вакансии
     // fetchJobs();
   }
 );
@@ -352,6 +441,38 @@ watch(
 .dark .interview { background-color: #ffb300; }
 .dark .rejected { background-color: #d32f2f; }
 .dark .accepted { background-color: #388e3c; }
+
+/* Стили для JobView и кнопки "Назад" */
+.job-view-container {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.back-button-container {
+  margin-bottom: 20px;
+}
+
+.back-button {
+  padding: 8px 15px;
+  background-color: #f1f1f1;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.back-button:hover {
+  background-color: #e0e0e0;
+}
+
+.dark .back-button {
+  background-color: #333;
+  color: #ddd;
+}
+
+.dark .back-button:hover {
+  background-color: #444;
+}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
